@@ -10,3 +10,14 @@ export interface Product {
 export interface AdminState {
   isAuthenticated: boolean;
 }
+
+// Database product type (matches Supabase schema)
+export interface DbProduct {
+  id: string;
+  title: string;
+  description: string;
+  price: number;
+  image_url: string;
+  created_at: string;
+  updated_at: string;
+}

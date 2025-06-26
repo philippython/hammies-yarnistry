@@ -1,159 +1,124 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Product } from '../types';
+import { Product, DbProduct } from '../types';
+import { supabase } from '../lib/supabase';
 
 interface ProductContextType {
   products: Product[];
-  addProduct: (product: Omit<Product, 'id' | 'createdAt'>) => void;
-  removeProduct: (id: string) => void;
+  addProduct: (product: Omit<Product, 'id' | 'createdAt'>) => Promise<void>;
+  removeProduct: (id: string) => Promise<void>;
+  loading: boolean;
+  error: string | null;
 }
 
 const ProductContext = createContext<ProductContextType | undefined>(undefined);
 
-// Diverse collection of crochet products with Nigerian Naira prices
-const initialProducts: Product[] = [
-  {
-    id: '1',
-    title: 'Boho Crochet Tote Bag',
-    description: 'Handcrafted bohemian-style tote bag perfect for daily use',
-    price: 18000,
-    imageUrl: 'https://images.pexels.com/photos/6045242/pexels-photo-6045242.jpeg?auto=compress&cs=tinysrgb&w=800',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: '2',
-    title: 'Cozy Crochet Slippers',
-    description: 'Warm and comfortable house slippers in soft yarn',
-    price: 11200,
-    imageUrl: 'https://images.pexels.com/photos/7691691/pexels-photo-7691691.jpeg?auto=compress&cs=tinysrgb&w=800',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: '3',
-    title: 'Vintage Crochet Top',
-    description: 'Elegant sleeveless crochet top with intricate patterns',
-    price: 26000,
-    imageUrl: 'https://images.pexels.com/photos/4946515/pexels-photo-4946515.jpeg?auto=compress&cs=tinysrgb&w=800',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: '4',
-    title: 'Chunky Knit Shrug',
-    description: 'Oversized cozy shrug perfect for layering',
-    price: 22000,
-    imageUrl: 'https://images.pexels.com/photos/7691728/pexels-photo-7691728.jpeg?auto=compress&cs=tinysrgb&w=800',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: '5',
-    title: 'Crochet Bucket Hat',
-    description: 'Trendy bucket hat with beautiful stitch patterns',
-    price: 12800,
-    imageUrl: 'https://images.pexels.com/photos/5691630/pexels-photo-5691630.jpeg?auto=compress&cs=tinysrgb&w=800',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: '6',
-    title: 'Baby Crochet Blanket',
-    description: 'Soft and gentle blanket perfect for little ones',
-    price: 30000,
-    imageUrl: 'https://images.pexels.com/photos/6032874/pexels-photo-6032874.jpeg?auto=compress&cs=tinysrgb&w=800',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: '7',
-    title: 'Crochet Market Bag',
-    description: 'Eco-friendly mesh bag for shopping and storage',
-    price: 14000,
-    imageUrl: 'https://images.pexels.com/photos/7078662/pexels-photo-7078662.jpeg?auto=compress&cs=tinysrgb&w=800',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: '8',
-    title: 'Amigurumi Cat',
-    description: 'Adorable handmade cat toy for children',
-    price: 16000,
-    imageUrl: 'https://images.pexels.com/photos/6373478/pexels-photo-6373478.jpeg?auto=compress&cs=tinysrgb&w=800',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: '9',
-    title: 'Crochet Cardigan',
-    description: 'Elegant long cardigan with button closure',
-    price: 34000,
-    imageUrl: 'https://images.pexels.com/photos/7691735/pexels-photo-7691735.jpeg?auto=compress&cs=tinysrgb&w=800',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: '10',
-    title: 'Crochet Headband',
-    description: 'Stylish headband with flower detail',
-    price: 8800,
-    imageUrl: 'https://images.pexels.com/photos/7691740/pexels-photo-7691740.jpeg?auto=compress&cs=tinysrgb&w=800',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: '11',
-    title: 'Crochet Scarf',
-    description: 'Long cozy scarf in beautiful gradient colors',
-    price: 15200,
-    imageUrl: 'https://images.pexels.com/photos/7691745/pexels-photo-7691745.jpeg?auto=compress&cs=tinysrgb&w=800',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: '12',
-    title: 'Crochet Poncho',
-    description: 'Stylish poncho perfect for any season',
-    price: 27200,
-    imageUrl: 'https://images.pexels.com/photos/7691750/pexels-photo-7691750.jpeg?auto=compress&cs=tinysrgb&w=800',
-    createdAt: new Date().toISOString(),
-  },
-];
+// Helper function to convert database product to frontend product
+const dbProductToProduct = (dbProduct: DbProduct): Product => ({
+  id: dbProduct.id,
+  title: dbProduct.title,
+  description: dbProduct.description,
+  price: dbProduct.price,
+  imageUrl: dbProduct.image_url,
+  createdAt: dbProduct.created_at,
+});
 
 export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch products from Supabase
+  const fetchProducts = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      const formattedProducts = data?.map(dbProductToProduct) || [];
+      setProducts(formattedProducts);
+    } catch (err) {
+      console.error('Error fetching products:', err);
+      setError('Failed to load products. Please check your internet connection.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Add product to Supabase
+  const addProduct = async (productData: Omit<Product, 'id' | 'createdAt'>) => {
+    try {
+      setError(null);
+      
+      const { data, error } = await supabase
+        .from('products')
+        .insert([
+          {
+            title: productData.title,
+            description: productData.description,
+            price: productData.price,
+            image_url: productData.imageUrl,
+          }
+        ])
+        .select()
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      if (data) {
+        const newProduct = dbProductToProduct(data);
+        setProducts(prev => [newProduct, ...prev]);
+      }
+    } catch (err) {
+      console.error('Error adding product:', err);
+      setError('Failed to add product. Please try again.');
+      throw err;
+    }
+  };
+
+  // Remove product from Supabase
+  const removeProduct = async (id: string) => {
+    try {
+      setError(null);
+      
+      const { error } = await supabase
+        .from('products')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        throw error;
+      }
+
+      setProducts(prev => prev.filter(p => p.id !== id));
+    } catch (err) {
+      console.error('Error removing product:', err);
+      setError('Failed to delete product. Please try again.');
+      throw err;
+    }
+  };
 
   useEffect(() => {
-    // Check if products exist in localStorage
-    const savedProducts = localStorage.getItem('hammies-products');
-    
-    if (savedProducts) {
-      // Use saved products if they exist
-      try {
-        const parsedProducts = JSON.parse(savedProducts);
-        setProducts(parsedProducts);
-      } catch (error) {
-        console.error('Error parsing saved products:', error);
-        // If parsing fails, use initial products
-        setProducts(initialProducts);
-        localStorage.setItem('hammies-products', JSON.stringify(initialProducts));
-      }
-    } else {
-      // First time visit - use initial products
-      setProducts(initialProducts);
-      localStorage.setItem('hammies-products', JSON.stringify(initialProducts));
-    }
+    fetchProducts();
   }, []);
 
-  const addProduct = (productData: Omit<Product, 'id' | 'createdAt'>) => {
-    const newProduct: Product = {
-      ...productData,
-      id: Date.now().toString(),
-      createdAt: new Date().toISOString(),
-    };
-    
-    const updatedProducts = [newProduct, ...products];
-    setProducts(updatedProducts);
-    localStorage.setItem('hammies-products', JSON.stringify(updatedProducts));
-  };
-
-  const removeProduct = (id: string) => {
-    const updatedProducts = products.filter(p => p.id !== id);
-    setProducts(updatedProducts);
-    localStorage.setItem('hammies-products', JSON.stringify(updatedProducts));
-  };
-
   return (
-    <ProductContext.Provider value={{ products, addProduct, removeProduct }}>
+    <ProductContext.Provider value={{ 
+      products, 
+      addProduct, 
+      removeProduct, 
+      loading, 
+      error 
+    }}>
       {children}
     </ProductContext.Provider>
   );
