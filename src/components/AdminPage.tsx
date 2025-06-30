@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useProducts } from '../context/ProductContext';
-import { Upload, Plus, X, Eye, EyeOff, Trash2, AlertTriangle, Loader2, Edit3, Save, Camera, Image as ImageIcon } from 'lucide-react';
+import { Upload, Plus, X, Eye, EyeOff, Trash2, AlertTriangle, Loader2, Edit3, Save, Camera, Image as ImageIcon, Folder } from 'lucide-react';
 import { Product } from '../types';
 
 const ADMIN_PASSWORD = 'hammies2024'; // Simple demo password
@@ -315,21 +315,37 @@ const AdminPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                   Product Image
                 </label>
                 <div className="space-y-4">
-                  {/* Image Upload */}
-                  <div className="flex items-center gap-4">
-                    <label className="flex-1 cursor-pointer">
+                  {/* Image Upload Options */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* Choose from Gallery/Storage */}
+                    <label className="cursor-pointer">
                       <div className="w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-xl hover:border-rose-400 transition-colors duration-200 flex items-center justify-center gap-2 text-gray-600 hover:text-rose-600">
                         {uploadingImage ? (
                           <>
                             <Loader2 className="w-5 h-5 animate-spin" />
-                            <span>Uploading...</span>
+                            <span className="text-sm">Uploading...</span>
                           </>
                         ) : (
                           <>
-                            <Camera className="w-5 h-5" />
-                            <span>Upload from Phone/Camera</span>
+                            <Folder className="w-5 h-5" />
+                            <span className="text-sm">Choose from Gallery</span>
                           </>
                         )}
+                      </div>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handleFileSelect(e)}
+                        className="hidden"
+                        disabled={uploadingImage || isSubmitting}
+                      />
+                    </label>
+
+                    {/* Take Photo */}
+                    <label className="cursor-pointer">
+                      <div className="w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-xl hover:border-rose-400 transition-colors duration-200 flex items-center justify-center gap-2 text-gray-600 hover:text-rose-600">
+                        <Camera className="w-5 h-5" />
+                        <span className="text-sm">Take Photo</span>
                       </div>
                       <input
                         type="file"
@@ -426,7 +442,6 @@ const AdminPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                               <input
                                 type="file"
                                 accept="image/*"
-                                capture="environment"
                                 onChange={(e) => handleFileSelect(e, true)}
                                 className="hidden"
                                 disabled={uploadingImage}
