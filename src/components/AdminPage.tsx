@@ -1,16 +1,19 @@
 import React, { useState } from 'react';
 import { useProducts } from '../context/ProductContext';
-import { Upload, Plus, X, Eye, EyeOff, Trash2, AlertTriangle, Loader2 } from 'lucide-react';
+import { Upload, Plus, X, Eye, EyeOff, Trash2, AlertTriangle, Loader2, Edit3, Save, Camera, Image as ImageIcon } from 'lucide-react';
+import { Product } from '../types';
 
 const ADMIN_PASSWORD = 'hammies2024'; // Simple demo password
 
 const AdminPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
-  const { products, addProduct, removeProduct, loading, error } = useProducts();
+  const { products, addProduct, updateProduct, removeProduct, uploadImage, loading, error } = useProducts();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -18,7 +21,11 @@ const AdminPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     description: '',
     price: '',
     imageUrl: '',
+    imageFile: null as File | null,
   });
+
+  // Edit form state
+  const [editData, setEditData] = useState<Partial<Product>>({});
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,10 +37,46 @@ const AdminPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     }
   };
 
+  const handleImageUpload = async (file: File, isEdit = false) => {
+    try {
+      setUploadingImage(true);
+      const imageUrl = await uploadImage(file);
+      
+      if (isEdit) {
+        setEditData(prev => ({ ...prev, imageUrl }));
+      } else {
+        setFormData(prev => ({ ...prev, imageUrl, imageFile: file }));
+      }
+    } catch (error) {
+      alert('Failed to upload image. Please try again.');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, isEdit = false) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        alert('Please select an image file');
+        return;
+      }
+      
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        alert('Image size should be less than 5MB');
+        return;
+      }
+
+      handleImageUpload(file, isEdit);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.title || !formData.description || !formData.price || !formData.imageUrl) {
-      alert('Please fill in all fields');
+      alert('Please fill in all fields and upload an image');
       return;
     }
 
@@ -51,6 +94,7 @@ const AdminPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         description: '',
         price: '',
         imageUrl: '',
+        imageFile: null,
       });
 
       alert('Product added successfully!');
@@ -66,6 +110,50 @@ const AdminPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       ...formData,
       [e.target.name]: e.target.value,
     });
+  };
+
+  const handleEditInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setEditData({
+      ...editData,
+      [e.target.name]: e.target.value,
+    });
+  };
+
+  const startEdit = (product: Product) => {
+    setEditingProduct(product.id);
+    setEditData({
+      title: product.title,
+      description: product.description,
+      price: product.price,
+      imageUrl: product.imageUrl,
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingProduct(null);
+    setEditData({});
+  };
+
+  const saveEdit = async () => {
+    if (!editingProduct || !editData.title || !editData.description || !editData.price || !editData.imageUrl) {
+      alert('Please fill in all fields');
+      return;
+    }
+
+    try {
+      await updateProduct(editingProduct, {
+        title: editData.title,
+        description: editData.description,
+        price: typeof editData.price === 'string' ? parseFloat(editData.price) : editData.price,
+        imageUrl: editData.imageUrl,
+      });
+
+      setEditingProduct(null);
+      setEditData({});
+      alert('Product updated successfully!');
+    } catch (error) {
+      alert('Failed to update product. Please try again.');
+    }
   };
 
   const handleDeleteProduct = async (productId: string, productTitle: string) => {
@@ -224,23 +312,73 @@ const AdminPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Image URL
+                  Product Image
                 </label>
-                <input
-                  type="url"
-                  name="imageUrl"
-                  value={formData.imageUrl}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-rose-500 focus:border-transparent"
-                  placeholder="https://example.com/image.jpg"
-                  required
-                  disabled={isSubmitting}
-                />
+                <div className="space-y-4">
+                  {/* Image Upload */}
+                  <div className="flex items-center gap-4">
+                    <label className="flex-1 cursor-pointer">
+                      <div className="w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-xl hover:border-rose-400 transition-colors duration-200 flex items-center justify-center gap-2 text-gray-600 hover:text-rose-600">
+                        {uploadingImage ? (
+                          <>
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            <span>Uploading...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Camera className="w-5 h-5" />
+                            <span>Upload from Phone/Camera</span>
+                          </>
+                        )}
+                      </div>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        onChange={(e) => handleFileSelect(e)}
+                        className="hidden"
+                        disabled={uploadingImage || isSubmitting}
+                      />
+                    </label>
+                  </div>
+
+                  {/* Image Preview */}
+                  {formData.imageUrl && (
+                    <div className="relative">
+                      <img 
+                        src={formData.imageUrl} 
+                        alt="Preview"
+                        className="w-full h-32 object-cover rounded-lg border"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, imageUrl: '', imageFile: null }))}
+                        className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors duration-200"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* URL Input as fallback */}
+                  <div className="relative">
+                    <input
+                      type="url"
+                      name="imageUrl"
+                      value={formData.imageUrl}
+                      onChange={handleInputChange}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-rose-500 focus:border-transparent"
+                      placeholder="Or paste image URL here"
+                      disabled={isSubmitting}
+                    />
+                    <ImageIcon className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  </div>
+                </div>
               </div>
 
               <button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isSubmitting || uploadingImage || !formData.imageUrl}
                 className="w-full bg-gradient-to-r from-rose-400 to-pink-500 text-white py-3 px-6 rounded-xl font-medium hover:from-rose-500 hover:to-pink-600 transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? (
@@ -272,47 +410,129 @@ const AdminPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             ) : (
               <div className="space-y-4 max-h-96 overflow-y-auto">
                 {products.map((product) => (
-                  <div key={product.id} className="flex items-center gap-4 p-4 border border-gray-200 rounded-xl">
-                    <img 
-                      src={product.imageUrl} 
-                      alt={product.title}
-                      className="w-16 h-16 object-cover rounded-lg flex-shrink-0"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-gray-800 truncate">{product.title}</h3>
-                      <p className="text-sm text-gray-600 truncate">{product.description}</p>
-                      <p className="text-sm font-medium text-rose-600">₦{product.price.toLocaleString()}</p>
-                    </div>
-                    <div className="flex-shrink-0">
-                      {deleteConfirm === product.id ? (
-                        <div className="flex items-center gap-2">
-                          <div className="flex items-center gap-1 text-red-600 text-xs">
-                            <AlertTriangle className="w-4 h-4" />
-                            <span>Sure?</span>
+                  <div key={product.id} className="border border-gray-200 rounded-xl p-4">
+                    {editingProduct === product.id ? (
+                      // Edit Mode
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-4">
+                          <div className="relative">
+                            <img 
+                              src={editData.imageUrl || product.imageUrl} 
+                              alt={editData.title || product.title}
+                              className="w-16 h-16 object-cover rounded-lg flex-shrink-0"
+                            />
+                            <label className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center cursor-pointer opacity-0 hover:opacity-100 transition-opacity duration-200">
+                              <Camera className="w-5 h-5 text-white" />
+                              <input
+                                type="file"
+                                accept="image/*"
+                                capture="environment"
+                                onChange={(e) => handleFileSelect(e, true)}
+                                className="hidden"
+                                disabled={uploadingImage}
+                              />
+                            </label>
                           </div>
+                          <div className="flex-1 space-y-2">
+                            <input
+                              type="text"
+                              name="title"
+                              value={editData.title || ''}
+                              onChange={handleEditInputChange}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-transparent text-sm"
+                              placeholder="Product title"
+                            />
+                            <textarea
+                              name="description"
+                              value={editData.description || ''}
+                              onChange={handleEditInputChange}
+                              rows={2}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-transparent text-sm resize-none"
+                              placeholder="Product description"
+                            />
+                            <div className="relative">
+                              <span className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">₦</span>
+                              <input
+                                type="number"
+                                name="price"
+                                value={editData.price || ''}
+                                onChange={handleEditInputChange}
+                                min="0"
+                                step="100"
+                                className="w-full pl-6 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-transparent text-sm"
+                                placeholder="Price"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
                           <button
-                            onClick={() => handleDeleteProduct(product.id, product.title)}
-                            className="px-3 py-1 bg-red-500 text-white text-xs rounded-lg hover:bg-red-600 transition-colors duration-200"
+                            onClick={saveEdit}
+                            className="flex-1 px-3 py-2 bg-green-500 text-white text-sm rounded-lg hover:bg-green-600 transition-colors duration-200 flex items-center justify-center gap-1"
                           >
-                            DELETE
+                            <Save className="w-4 h-4" />
+                            Save
                           </button>
                           <button
-                            onClick={() => setDeleteConfirm(null)}
-                            className="px-3 py-1 bg-gray-300 text-gray-700 text-xs rounded-lg hover:bg-gray-400 transition-colors duration-200"
+                            onClick={cancelEdit}
+                            className="flex-1 px-3 py-2 bg-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-400 transition-colors duration-200"
                           >
                             Cancel
                           </button>
                         </div>
-                      ) : (
-                        <button
-                          onClick={() => handleDeleteProduct(product.id, product.title)}
-                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors duration-200"
-                          title="Delete product permanently"
-                        >
-                          <Trash2 className="w-5 h-5" />
-                        </button>
-                      )}
-                    </div>
+                      </div>
+                    ) : (
+                      // View Mode
+                      <div className="flex items-center gap-4">
+                        <img 
+                          src={product.imageUrl} 
+                          alt={product.title}
+                          className="w-16 h-16 object-cover rounded-lg flex-shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-gray-800 truncate">{product.title}</h3>
+                          <p className="text-sm text-gray-600 truncate">{product.description}</p>
+                          <p className="text-sm font-medium text-rose-600">₦{product.price.toLocaleString()}</p>
+                        </div>
+                        <div className="flex-shrink-0 flex gap-2">
+                          <button
+                            onClick={() => startEdit(product)}
+                            className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors duration-200"
+                            title="Edit product"
+                          >
+                            <Edit3 className="w-5 h-5" />
+                          </button>
+                          {deleteConfirm === product.id ? (
+                            <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1 text-red-600 text-xs">
+                                <AlertTriangle className="w-4 h-4" />
+                                <span>Sure?</span>
+                              </div>
+                              <button
+                                onClick={() => handleDeleteProduct(product.id, product.title)}
+                                className="px-3 py-1 bg-red-500 text-white text-xs rounded-lg hover:bg-red-600 transition-colors duration-200"
+                              >
+                                DELETE
+                              </button>
+                              <button
+                                onClick={() => setDeleteConfirm(null)}
+                                className="px-3 py-1 bg-gray-300 text-gray-700 text-xs rounded-lg hover:bg-gray-400 transition-colors duration-200"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => handleDeleteProduct(product.id, product.title)}
+                              className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors duration-200"
+                              title="Delete product permanently"
+                            >
+                              <Trash2 className="w-5 h-5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
                 

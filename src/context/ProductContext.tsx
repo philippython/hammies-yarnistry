@@ -5,7 +5,9 @@ import { supabase } from '../lib/supabase';
 interface ProductContextType {
   products: Product[];
   addProduct: (product: Omit<Product, 'id' | 'createdAt'>) => Promise<void>;
+  updateProduct: (id: string, updates: Partial<Omit<Product, 'id' | 'createdAt'>>) => Promise<void>;
   removeProduct: (id: string) => Promise<void>;
+  uploadImage: (file: File) => Promise<string>;
   loading: boolean;
   error: string | null;
 }
@@ -52,6 +54,38 @@ export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
   };
 
+  // Upload image to Supabase Storage
+  const uploadImage = async (file: File): Promise<string> => {
+    try {
+      // Create a unique filename
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+      const filePath = `product-images/${fileName}`;
+
+      // Upload file to Supabase Storage
+      const { data, error } = await supabase.storage
+        .from('product-images')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (error) {
+        throw error;
+      }
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('product-images')
+        .getPublicUrl(filePath);
+
+      return publicUrl;
+    } catch (err) {
+      console.error('Error uploading image:', err);
+      throw new Error('Failed to upload image. Please try again.');
+    }
+  };
+
   // Add product to Supabase
   const addProduct = async (productData: Omit<Product, 'id' | 'createdAt'>) => {
     try {
@@ -81,6 +115,39 @@ export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children })
     } catch (err) {
       console.error('Error adding product:', err);
       setError('Failed to add product. Please try again.');
+      throw err;
+    }
+  };
+
+  // Update product in Supabase
+  const updateProduct = async (id: string, updates: Partial<Omit<Product, 'id' | 'createdAt'>>) => {
+    try {
+      setError(null);
+      
+      const updateData: any = {};
+      if (updates.title !== undefined) updateData.title = updates.title;
+      if (updates.description !== undefined) updateData.description = updates.description;
+      if (updates.price !== undefined) updateData.price = updates.price;
+      if (updates.imageUrl !== undefined) updateData.image_url = updates.imageUrl;
+
+      const { data, error } = await supabase
+        .from('products')
+        .update(updateData)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      if (data) {
+        const updatedProduct = dbProductToProduct(data);
+        setProducts(prev => prev.map(p => p.id === id ? updatedProduct : p));
+      }
+    } catch (err) {
+      console.error('Error updating product:', err);
+      setError('Failed to update product. Please try again.');
       throw err;
     }
   };
@@ -115,7 +182,9 @@ export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children })
     <ProductContext.Provider value={{ 
       products, 
       addProduct, 
+      updateProduct,
       removeProduct, 
+      uploadImage,
       loading, 
       error 
     }}>
